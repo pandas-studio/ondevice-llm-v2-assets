@@ -1,0 +1,2 @@
+run_id,notebook,model,precision,runtime,device,input_tokens,output_tokens,ttft_s,decode_tps,peak_mem_mib,model_file_mib,quality_score,timestamp,notes
+e5528b52,v2_d1_01,(env),,env,arm64-mps,,,,,,,,2026-07-23T10:09:30+00:00,device_label=arm64-mps;cpu_cores=16;ram_gib=64.0;transformers=5.14.1
