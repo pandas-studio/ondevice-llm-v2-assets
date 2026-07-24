@@ -1,3 +1,5 @@
-run_id,notebook,model,precision,runtime,device,input_tokens,output_tokens,ttft_s,decode_tps,peak_mem_mib,model_file_mib,quality_score,timestamp,notes
-dbcc04e2,v2_d1_03,HuggingFaceTB/SmolLM2-360M-Instruct,fp32,transformers,arm64-mps,115,32,0.024,89.9,1037.0,1560.2,2,2026-07-23T10:10:19+00:00,기준선 probe 3문항
-30b88b97,v2_d1_03,HuggingFaceTB/SmolLM2-360M-Instruct,int8-torchao,transformers-cpu,arm64-mps,115,32,0.229,25.4,2148.7,1560.2,2,2026-07-23T10:10:28+00:00,CPU 데모 · probe 3문항(만점 3)
+run_id,notebook,source,model,precision,runtime,device,input_tokens,output_tokens,ttft_s,decode_tps,peak_mem_mib,cpu_rss_delta_mib,model_file_mib,quality_score,timestamp,notes
+53d4ddd2,v2_d1_03,measured,Qwen/Qwen2.5-0.5B-Instruct,fp16,transformers,T4,58,64,0.071,8.8,955.4,,942.3,4,2026-07-24T03:46:02+00:00,기준선 probe 6문항
+bd276c16,v2_d1_03,measured,Qwen/Qwen2.5-0.5B-Instruct,int8-torchao,transformers-cpu,cpu-2c,58,32,16.765,1.9,,16.6,992.4,2,2026-07-24T03:49:55+00:00,CPU 데모 · probe 3문항(만점 3)
+967a4cf1,v2_d1_03,measured,Qwen/Qwen2.5-0.5B-Instruct,nf4-bnb,transformers,T4,58,64,0.113,12.8,464.3,,430.4,2,2026-07-24T03:50:38+00:00,double_quant=True · probe 6문항
+f9850ec7,v2_d1_03,measured,Qwen/Qwen2.5-0.5B-Instruct,int8-bnb,transformers,T4,58,64,0.204,6.2,811.6,,601.0,5,2026-07-24T03:52:04+00:00,LLM.int8() · probe 6문항

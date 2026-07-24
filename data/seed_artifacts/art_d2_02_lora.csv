@@ -1,3 +1,3 @@
-run_id,notebook,model,precision,runtime,device,input_tokens,output_tokens,ttft_s,decode_tps,peak_mem_mib,model_file_mib,quality_score,timestamp,notes
-3258491d,v2_d2_02,HuggingFaceTB/SmolLM2-135M-Instruct,base,transformers,arm64-mps,,,,,,257.4,,2026-07-23T10:11:44+00:00,fp16 환산 저장 크기
-ac31e1bd,v2_d2_02,HuggingFaceTB/SmolLM2-135M-Instruct,lora-r4,transformers+peft,arm64-mps,,,,,,1.8,,2026-07-23T10:11:44+00:00,adapter만 / base 대비 0.70% / steps=20
+run_id,notebook,model,precision,runtime,device,input_tokens,output_tokens,ttft_s,decode_tps,peak_mem_mib,model_file_mib,quality_score,timestamp,notes,source,cpu_rss_delta_mib
+b484af94,v2_d2_02,Qwen/Qwen3-0.6B,base,transformers,T4,,,,,,721.2,,2026-07-24T01:42:27+00:00,fp16 환산 저장 크기,measured,
+7add410b,v2_d2_02,Qwen/Qwen3-0.6B,qlora-r8,transformers+peft,T4,,,,,,4.4,,2026-07-24T01:42:27+00:00,adapter만 / base 대비 0.61% / steps=40,measured,

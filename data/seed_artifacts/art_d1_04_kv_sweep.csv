@@ -1,4 +1,6 @@
-run_id,notebook,model,precision,runtime,device,input_tokens,output_tokens,ttft_s,decode_tps,peak_mem_mib,model_file_mib,quality_score,timestamp,notes
-a0a075fa,v2_d1_04,HuggingFaceTB/SmolLM2-135M-Instruct,fp32,transformers,arm64-mps,166,32,0.019,108.0,874.4,,,2026-07-23T10:10:38+00:00,ctx_target=128
-89785725,v2_d1_04,HuggingFaceTB/SmolLM2-135M-Instruct,fp32,transformers,arm64-mps,549,32,0.03,110.7,877.8,,,2026-07-23T10:10:39+00:00,ctx_target=512
-31be4765,v2_d1_04,HuggingFaceTB/SmolLM2-135M-Instruct,fp32,transformers,arm64-mps,1061,32,0.048,107.6,881.5,,,2026-07-23T10:10:40+00:00,ctx_target=1024
+run_id,notebook,model,precision,runtime,device,input_tokens,output_tokens,ttft_s,decode_tps,peak_mem_mib,model_file_mib,quality_score,timestamp,notes,source,cpu_rss_delta_mib
+9030104c,v2_d1_04,Qwen/Qwen2.5-0.5B-Instruct,fp16,transformers,T4,125,61,0.043,29.5,958.0,,,2026-07-24T00:56:38+00:00,ctx_target=128,measured,
+c94d8b47,v2_d1_04,Qwen/Qwen2.5-0.5B-Instruct,fp16,transformers,T4,509,64,0.053,25.8,1001.4,,,2026-07-24T00:56:45+00:00,ctx_target=512,measured,
+0c356ec5,v2_d1_04,Qwen/Qwen2.5-0.5B-Instruct,fp16,transformers,T4,1021,64,0.138,29.6,1116.3,,,2026-07-24T00:56:53+00:00,ctx_target=1024,measured,
+2d3c668c,v2_d1_04,Qwen/Qwen2.5-0.5B-Instruct,fp16,transformers,T4,2045,64,0.445,28.8,1540.6,,,2026-07-24T00:57:02+00:00,ctx_target=2048,measured,
+3587fea2,v2_d1_04,Qwen/Qwen2.5-0.5B-Instruct,fp16,transformers,T4,4092,64,1.512,18.2,3165.2,,,2026-07-24T00:57:24+00:00,ctx_target=4096,measured,
