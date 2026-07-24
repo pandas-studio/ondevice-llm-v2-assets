@@ -1,4 +1,4 @@
-"""kea_slm_lecture_v2 공용 유틸리티.
+"""ondevice_llm_lecture_v2 공용 유틸리티.
 
 모든 노트북이 공유하는 단일 소스: 환경 점검, 디바이스 감지, 시간 측정,
 아티팩트 저장/복원(Colab Drive + 로컬), 품질 프로브(probe_v1), 공통 벤치마크.
@@ -21,11 +21,20 @@ from pathlib import Path
 
 import torch
 
+# peak_mem_mib와 cpu_rss_delta_mib는 의도적으로 다른 열이다. 전자는 CUDA
+# allocator의 진짜 peak이고 후자는 CPU 프로세스 RSS 증가분 — 측정 대상도 단위
+# 기준도 달라서 한 열에 섞으면 "INT8이 fp16보다 4배 크다" 같은 거짓 비교가 나온다.
 SCHEMA = [
-    "run_id", "notebook", "model", "precision", "runtime", "device",
+    "run_id", "notebook", "source", "model", "precision", "runtime", "device",
     "input_tokens", "output_tokens", "ttft_s", "decode_tps",
-    "peak_mem_mib", "model_file_mib", "quality_score", "timestamp", "notes",
+    "peak_mem_mib", "cpu_rss_delta_mib", "model_file_mib", "quality_score",
+    "timestamp", "notes",
 ]
+
+# source 열의 값. 캡스톤은 'measured' 행만 결정 근거로 받는다 — seed는 강사가 다른
+# 기기에서 잰 값이라 "내 실측"이 아니고, 섞이면 보고서가 남의 숫자를 내 근거로 둔갑시킨다.
+SOURCE_MEASURED = "measured"
+SOURCE_SEED = "seed"
 
 DRIVE_DIR = Path("/content/drive/MyDrive/ondevice_llm_v2/artifacts")
 LOCAL_DIR = Path("artifacts")
@@ -51,6 +60,16 @@ def get_device() -> str:
     return "cpu"
 
 
+def cpu_label() -> str:
+    """CPU에서 돌린 행의 device 라벨.
+
+    device_label()은 호스트 기준이라 GPU가 있으면 'T4'를 돌려준다. llama.cpp나
+    torchao CPU 데모처럼 실제로 CPU에서 실행한 행에 그대로 쓰면 GPU 실측인 것처럼
+    기록되므로, 그런 행은 반드시 이 라벨을 명시해야 한다.
+    """
+    return f"cpu-{os.cpu_count()}c"
+
+
 def device_label() -> str:
     """CSV device 열에 기록할 사람이 읽는 라벨 (예: 'T4', 'M2', 'cpu-2c')."""
     dev = get_device()
@@ -59,7 +78,7 @@ def device_label() -> str:
         return re.sub(r"^(NVIDIA|Tesla)\s+", "", name).strip()
     if dev == "mps":
         return f"{platform.machine()}-mps"
-    return f"cpu-{os.cpu_count()}c"
+    return cpu_label()
 
 
 def env_check() -> dict:
@@ -143,29 +162,58 @@ def save_artifact(obj, name: str) -> Path:
     return saved
 
 
-def restore_artifacts(names: list[str] | None = None) -> None:
+def _stamp_source(path: Path, value: str) -> None:
+    """복원한 CSV의 source 열을 실제 출처로 덮어쓴다.
+
+    seed CSV는 강사가 실행해 만든 것이라 안에는 source=measured가 적혀 있다.
+    그대로 두면 캡스톤이 남의 실측을 '내 실측'으로 받아들이므로, 내려받는 시점에
+    출처를 사실대로 다시 찍는다.
+    """
+    if path.suffix != ".csv":
+        return
+    try:
+        import pandas as pd
+
+        df = pd.read_csv(path)
+        df["source"] = value
+        df.to_csv(path, index=False)
+    except Exception:  # noqa: BLE001 — 스탬프 실패가 수업을 멈추지는 않는다
+        print(f"   (참고: {path.name}의 source 열을 갱신하지 못했습니다)")
+
+
+def restore_artifacts(names: list[str] | None = None) -> dict:
     """이전 노트북의 아티팩트를 로컬 artifacts/로 복원.
 
     우선순위: 이미 로컬에 있음 → Drive에서 복사 → seed(강사 참조치) 다운로드.
-    seed로 복원된 파일은 '내 실측치가 아님' 경고를 출력한다.
+    seed로 복원된 CSV는 source 열이 'seed'로 다시 찍혀, 캡스톤이 이를 내 실측과
+    구분할 수 있다.
+
+    반환: {파일명: 출처} — 출처는 local / drive / seed / missing.
     """
     import urllib.request
 
     LOCAL_DIR.mkdir(exist_ok=True)
+    origins: dict[str, str] = {}
     if not names:
-        return
+        return origins
     for name in names:
         if (LOCAL_DIR / name).exists():
+            origins[name] = "local"
             continue
         if (DRIVE_DIR / name).exists():
             shutil.copy(DRIVE_DIR / name, LOCAL_DIR / name)
             print(f"Drive에서 복원: {name}")
+            origins[name] = "drive"
             continue
         try:
             urllib.request.urlretrieve(f"{SEED_URL_BASE}/{name}", LOCAL_DIR / name)
+            _stamp_source(LOCAL_DIR / name, SOURCE_SEED)
             print(f"⚠️ {name}: 내 실측치를 찾지 못해 강사 참조치(seed)로 대체했습니다.")
+            origins[name] = "seed"
         except Exception:  # noqa: BLE001
             print(f"⚠️ {name}: 복원 실패 — 이 파일을 만드는 이전 노트북을 먼저 실행하세요.")
+            origins[name] = "missing"
+    return origins
 
 
 def new_row(**kw) -> dict:
@@ -173,6 +221,7 @@ def new_row(**kw) -> dict:
     row = {k: "" for k in SCHEMA}
     row["run_id"] = uuid.uuid4().hex[:8]
     row["device"] = device_label()
+    row["source"] = SOURCE_MEASURED   # 이 행은 지금 이 기기에서 잰 값이다
     row["timestamp"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     unknown = set(kw) - set(SCHEMA)
     if unknown:
@@ -323,11 +372,18 @@ def hf_generate_fn(model, tokenizer, max_new_tokens: int = 96):
 
 def measure_generation(model, tokenizer, prompt: str, max_new_tokens: int = 96,
                        runs: int = 3) -> dict:
-    """TTFT(첫 토큰), decode tok/s, peak 메모리 측정. warm run들의 중앙값."""
+    """TTFT(첫 토큰), decode tok/s, 메모리 측정. warm run들의 중앙값.
+
+    메모리는 실행 장치에 따라 다른 열로 나간다 — CUDA면 allocator peak가
+    peak_mem_mib로, CPU면 측정 구간의 RSS 증가분이 cpu_rss_delta_mib로.
+    """
+    import psutil
     from statistics import median
 
     device = model.device
     ids = chat_ids(tokenizer, prompt, device)
+    proc = psutil.Process()
+    rss_before = proc.memory_info().rss
 
     ttfts, tpss, n_outs = [], [], []
     for i in range(runs + 1):  # +1 = cold run(버림)
@@ -353,28 +409,71 @@ def measure_generation(model, tokenizer, prompt: str, max_new_tokens: int = 96,
         tpss.append((n_new - 1) / decode_s)
         n_outs.append(n_new)
 
-    peak_mib = ""
+    # peak_mem_mib는 '가속기(GPU) 메모리' 전용 열이다.
+    #   CUDA — allocator의 진짜 peak (reset_peak_memory_stats로 구간 한정)
+    #   MPS  — peak API가 없어 driver 할당량. 같은 열이지만 CUDA peak보다
+    #          느슨한 값이라 Colab 수치와 직접 비교하지 말고 추세로만 읽을 것.
+    # CPU 실행은 여기에 넣지 않는다 — 프로세스 전체 RSS라 의미가 전혀 달라서,
+    # 섞으면 'INT8이 fp16보다 4배 크다' 같은 거짓 비교가 나온다.
+    peak_mib, rss_delta_mib = "", ""
     if device.type == "cuda":
         peak_mib = round(torch.cuda.max_memory_allocated() / 2**20, 1)
+    elif device.type == "mps":
+        peak_mib = round(torch.mps.driver_allocated_memory() / 2**20, 1)
     else:
-        import psutil
-
-        peak_mib = round(psutil.Process().memory_info().rss / 2**20, 1)
+        rss_delta_mib = round(
+            max(proc.memory_info().rss - rss_before, 0) / 2**20, 1
+        )
     return {
         "input_tokens": ids.shape[1],
         "output_tokens": int(median(n_outs)),
         "ttft_s": round(median(ttfts), 3),
         "decode_tps": round(median(tpss), 1),
         "peak_mem_mib": peak_mib,
+        "cpu_rss_delta_mib": rss_delta_mib,
     }
 
 
+def _storage_bytes(t, seen: set) -> int:
+    """텐서 하나가 실제로 차지하는 저장 바이트.
+
+    양자화 라이브러리는 가중치를 텐서 '서브클래스'로 감싼다. 이때 겉의
+    element_size()는 원래 dtype(예: fp32=4B)을 그대로 보고하므로 packing이
+    보이지 않는다 — torchao INT8이 '1.00× 축소'로 찍히던 원인이다.
+    서브클래스는 __tensor_flatten__()으로 내부 실제 텐서까지 내려가고,
+    tied weight(embedding↔lm_head)는 storage 주소로 중복 제거한다.
+    """
+    flatten = getattr(t, "__tensor_flatten__", None)
+    if flatten is not None and type(t) is not torch.Tensor:
+        try:
+            names, _ = flatten()
+            return sum(_storage_bytes(getattr(t, n), seen) for n in names)
+        except Exception:
+            pass  # 미지의 서브클래스 → 아래 storage 경로로 폴백
+    try:
+        storage = t.untyped_storage()
+        key = (str(t.device), storage.data_ptr(), storage.nbytes())
+        if key in seen:
+            return 0
+        seen.add(key)
+        return storage.nbytes()
+    except Exception:
+        return t.numel() * t.element_size()
+
+
 def state_dict_mib(model) -> float:
-    """모델 가중치의 실제 저장 크기(MiB) — '작아졌다'의 근거 수치."""
-    total = 0
-    for t in model.state_dict().values():
-        if torch.is_tensor(t):
-            total += t.numel() * t.element_size()
+    """모델 가중치의 실제 저장 크기(MiB) — '작아졌다'의 근거 수치.
+
+    plain tensor · tied weight · bitsandbytes 4/8-bit · torchao 서브클래스를
+    모두 실제 저장 바이트로 잰다. GGUF처럼 파일이 곧 모델인 런타임에는 쓰지 말고
+    파일 크기를 직접 기록할 것 (같은 열에 섞으면 비교가 무의미해진다).
+    """
+    seen: set = set()
+    total = sum(
+        _storage_bytes(t, seen)
+        for t in model.state_dict(keep_vars=True).values()
+        if torch.is_tensor(t)
+    )
     return round(total / 2**20, 1)
 
 
