@@ -327,8 +327,20 @@ def load_model(model_id: str, dtype=None, **kw):
     - CUDA: device_map="cuda"로 바로 배치.
     - MPS/CPU: device_map 없이 로드 후 .to(device) — macOS에서 device_map="mps"
       로드가 프로세스를 죽이는 문제(torch 2.13/transformers 5.14 조합)를 우회한다.
+
+    로드 직전에 미수거 잔존을 정리한다. free_model(m)의 `del`은 호출자 변수를
+    지우지 못해(파이썬 스코프 규칙) 이전 모델이 참조 해제 뒤에도 잠깐 살아 있는데,
+    그 상태로 새 모델을 올리면 두 모델이 겹쳐 다음 peak 측정이 부풀려진다.
+    여기서 gc를 강제해 스윕 각 반복이 깨끗한 baseline에서 시작하도록 한다.
     """
+    import gc
+
     from transformers import AutoModelForCausalLM
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
 
     dev = get_device()
     if dtype is None:
@@ -478,7 +490,13 @@ def state_dict_mib(model) -> float:
 
 
 def free_model(*objs) -> None:
-    """모델 교체 전 메모리 정리 (T4 14.5GB에서 4모델 순차 비교의 필수 의식)."""
+    """모델 교체 전 메모리 정리 (T4 14.5GB에서 4모델 순차 비교의 필수 의식).
+
+    주의: `del o`는 이 함수의 인자 바인딩만 없앨 뿐 호출자의 변수는 못 지운다.
+    호출자가 모델을 지역변수로 들고 있다면 함수가 끝나 그 스코프가 사라질 때
+    참조가 풀린다. 확실한 수거는 다음 load_model()이 시작에서 gc를 돌려 보장한다.
+    루프 밖 변수라면 호출 후 직접 None을 넣어 참조를 끊어라: m = None.
+    """
     import gc
 
     for o in objs:
